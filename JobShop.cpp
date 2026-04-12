@@ -214,3 +214,64 @@ void resolveHeuristica(GrafoDisjuntivo &g) {
 
   g.constroiAdjacencia();
 }
+
+// Busca Local baseada em Hill Climbing
+void buscaLocal(GrafoDisjuntivo &g) {
+  bool melhorou = true;
+  while (melhorou) {
+    melhorou = false;
+
+    vector<int> ordem;
+    if (!caminhadaTopologica(g, ordem))
+      break;
+
+    vector<int> caminho_critico;
+    int melhor_makespan = caminhoMaximo(g, ordem, caminho_critico);
+
+    for (int i = 0; i < (int)caminho_critico.size() - 1; ++i) {
+      int u = caminho_critico[i];
+      int v = caminho_critico[i + 1];
+
+      if (g.M[u] == g.M[v] && g.SucM[u] == v) {
+        
+        // Salva estado antigo
+        int ant_u = g.AntM[u];
+        int suc_v = g.SucM[v];
+
+        // Swap
+        g.SucM[u] = suc_v;
+        g.AntM[u] = v;
+        g.SucM[v] = u;
+        g.AntM[v] = ant_u;
+
+        if (ant_u != -1) g.SucM[ant_u] = v;
+        if (suc_v != -1) g.AntM[suc_v] = u;
+
+        g.constroiAdjacencia();
+
+        vector<int> nova_ordem;
+        if (caminhadaTopologica(g, nova_ordem)) {
+          vector<int> novo_caminho;
+          int novo_makespan = caminhoMaximo(g, nova_ordem, novo_caminho);
+
+          // Funcao objetivo de Minimizacao
+          if (novo_makespan < melhor_makespan) {
+            melhorou = true;
+            break; // Aceita a melhora e reinicia a busca
+          }
+        }
+
+        // Reverte as mudancas se piorou ou se causou ciclo
+        g.SucM[u] = v;
+        g.AntM[u] = ant_u;
+        g.SucM[v] = suc_v;
+        g.AntM[v] = u;
+
+        if (ant_u != -1) g.SucM[ant_u] = u;
+        if (suc_v != -1) g.AntM[suc_v] = v;
+
+        g.constroiAdjacencia();
+      }
+    }
+  }
+}

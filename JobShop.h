@@ -36,5 +36,6 @@ void lerInstancia(string filepath, GrafoDisjuntivo& g);
 bool caminhadaTopologica(const GrafoDisjuntivo& g, vector<int>& ordem);
 int caminhoMaximo(const GrafoDisjuntivo& g, const vector<int>& ordem_topologica, vector<int>& caminho);
 void resolveHeuristica(GrafoDisjuntivo& g);
+void buscaLocal(GrafoDisjuntivo& g);
 
 #endif

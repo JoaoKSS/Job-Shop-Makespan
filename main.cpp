@@ -19,13 +19,17 @@ int main(int argc, char* argv[]) {
 
     cout << "Instancia carregada: " << g.num_jobs << " Jobs, " << g.num_maquinas << " Maquinas." << endl;
 
-    resolveHeuristica(g); // Gera o agendamento simples
+    resolveHeuristica(g);
 
     vector<int> ordem;
     if (!caminhadaTopologica(g, ordem)) {
         cout << "A heuristica gerou um ciclo! Escalonamento invalido." << endl;
         return 1;
     }
+
+    buscaLocal(g); // Tenta otimizar a matriz g
+    caminhadaTopologica(g, ordem); // Refaz a caminha
+
 
     cout << "Caminhada topologica realizada com sucesso. Vertices iterados: " << ordem.size() << endl;
     
