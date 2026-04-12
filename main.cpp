@@ -1,7 +1,9 @@
 #include "JobShop.h"
 #include <iostream>
+#include <chrono>
 
 using namespace std;
+using namespace std::chrono;
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -19,6 +21,8 @@ int main(int argc, char* argv[]) {
 
     cout << "Instancia carregada: " << g.num_jobs << " Jobs, " << g.num_maquinas << " Maquinas." << endl;
 
+    auto time_start = high_resolution_clock::now();
+
     resolveHeuristica(g);
 
     vector<int> ordem;
@@ -29,6 +33,9 @@ int main(int argc, char* argv[]) {
 
     buscaLocal(g); // Tenta otimizar a matriz g
     caminhadaTopologica(g, ordem); // Refaz a caminha
+    
+    auto time_end = high_resolution_clock::now();
+    duration<double> tempo_decorrido = time_end - time_start;
 
 
     cout << "Caminhada topologica realizada com sucesso. Vertices iterados: " << ordem.size() << endl;
@@ -43,6 +50,7 @@ int main(int argc, char* argv[]) {
         cout << "[" << g.J[u] << "," << g.M[u] << "]" << (i == (int)caminho_critico.size()-1 ? "" : " -> ");
     }
     cout << endl;
+    cout << "Tempo de Execucao: " << tempo_decorrido.count() << " segundos" << endl;
 
     return 0;
 }
