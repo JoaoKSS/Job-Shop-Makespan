@@ -228,50 +228,79 @@ void buscaLocal(GrafoDisjuntivo &g) {
     vector<int> caminho_critico;
     int melhor_makespan = caminhoMaximo(g, ordem, caminho_critico);
 
-    for (int i = 0; i < (int)caminho_critico.size() - 1; ++i) {
+    // Vizinhança em Blocos
+    vector<pair<int, int>> pares_validos;
+    int n_crit = caminho_critico.size();
+    int i = 0;
+    while (i < n_crit - 1) {
       int u = caminho_critico[i];
       int v = caminho_critico[i + 1];
 
+      // Testa se inicia bloco de maquina
       if (g.M[u] == g.M[v] && g.SucM[u] == v) {
-        
-        // Salva estado antigo
-        int ant_u = g.AntM[u];
-        int suc_v = g.SucM[v];
-
-        // Swap
-        g.SucM[u] = suc_v;
-        g.AntM[u] = v;
-        g.SucM[v] = u;
-        g.AntM[v] = ant_u;
-
-        if (ant_u != -1) g.SucM[ant_u] = v;
-        if (suc_v != -1) g.AntM[suc_v] = u;
-
-        g.constroiAdjacencia();
-
-        vector<int> nova_ordem;
-        if (caminhadaTopologica(g, nova_ordem)) {
-          vector<int> novo_caminho;
-          int novo_makespan = caminhoMaximo(g, nova_ordem, novo_caminho);
-
-          // Funcao objetivo de Minimizacao
-          if (novo_makespan < melhor_makespan) {
-            melhorou = true;
-            break; // Aceita a melhora e reinicia a busca
-          }
+        int start = i;
+        int end = i + 1;
+        // Expande o bloco enquanto as proximas tarefas da linha critica forem da mesma maquina
+        while (end + 1 < n_crit && g.M[caminho_critico[end]] == g.M[caminho_critico[end + 1]] && g.SucM[caminho_critico[end]] == caminho_critico[end + 1]) {
+          end++;
         }
 
-        // Reverte as mudancas se piorou ou se causou ciclo
-        g.SucM[u] = v;
-        g.AntM[u] = ant_u;
-        g.SucM[v] = suc_v;
-        g.AntM[v] = u;
-
-        if (ant_u != -1) g.SucM[ant_u] = u;
-        if (suc_v != -1) g.AntM[suc_v] = v;
-
-        g.constroiAdjacencia();
+        if (end - start == 1) {
+          // Bloco com 2 tarefas swap
+          pares_validos.push_back({caminho_critico[start], caminho_critico[end]});
+        } else {
+          // Bloco com mais tarefas usa apenas os extremos
+          pares_validos.push_back({caminho_critico[start], caminho_critico[start + 1]});
+          pares_validos.push_back({caminho_critico[end - 1], caminho_critico[end]});
+        }
+        i = end; // Pula para fim do bloco
+      } else {
+        i++;
       }
+    }
+
+    // Tenta processar apenas as sub-areas com real potencial
+    for (auto par : pares_validos) {
+      int u = par.first;
+      int v = par.second;
+
+      // Salva estado antigo
+      int ant_u = g.AntM[u];
+      int suc_v = g.SucM[v];
+
+      // Swap
+      g.SucM[u] = suc_v;
+      g.AntM[u] = v;
+      g.SucM[v] = u;
+      g.AntM[v] = ant_u;
+
+      if (ant_u != -1) g.SucM[ant_u] = v;
+      if (suc_v != -1) g.AntM[suc_v] = u;
+
+      g.constroiAdjacencia();
+
+      vector<int> nova_ordem;
+      if (caminhadaTopologica(g, nova_ordem)) {
+        vector<int> novo_caminho;
+        int novo_makespan = caminhoMaximo(g, nova_ordem, novo_caminho);
+
+        // Funcao objetivo de Minimizacao
+        if (novo_makespan < melhor_makespan) {
+          melhorou = true;
+          break; // Aceita a melhora e reinicia a busca
+        }
+      }
+
+      // Reverte as mudancas se piorou ou se causou ciclo
+      g.SucM[u] = v;
+      g.AntM[u] = ant_u;
+      g.SucM[v] = suc_v;
+      g.AntM[v] = u;
+
+      if (ant_u != -1) g.SucM[ant_u] = u;
+      if (suc_v != -1) g.AntM[suc_v] = v;
+
+      g.constroiAdjacencia();
     }
   }
 }
