@@ -13,6 +13,10 @@ make
 make clean
 ```
 
+```bash
+./jobshop Instancias/JSP/nome_do_arquivo.psi > resultado.txt && python3 visualizar.py Instancias/JSP/nome_do_arquivo.psi resultado.txt
+```
+
 ## exemplo de saída
 
 Instancia carregada: n Jobs, m Maquinas.<br>
