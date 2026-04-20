@@ -4,6 +4,7 @@ import re
 import webbrowser
 
 def extrair_dados_psi(caminho_psi):
+    """Lê o arquivo .psi extraindo tempos E a ordem de precedência de cada Job."""
     try:
         with open(caminho_psi, 'r') as f:
             linhas = f.readlines()
@@ -19,18 +20,73 @@ def extrair_dados_psi(caminho_psi):
                 num_maquinas = int(partes[3])
                 break
 
+        # Lê a matriz de custos
         start_costs = False
         for linha in linhas:
             if "Costs:" in linha:
                 start_costs = True
                 continue
             if start_costs and len(tempos) < num_jobs:
-                valores = [int(x) for x in linha.split() if x.isdigit()]
+                valores = [int(x) for x in linha.split() if x.lstrip('-').isdigit()]
                 if valores: tempos.append(valores)
         
-        return num_jobs, num_maquinas, tempos
+        # Lê as dependências de cada Job (seção "Job: N")
+        # Constrói a sequência de máquinas de cada job
+        # SucJ[m] = próxima máquina após m, para cada job
+        job_deps = []  # lista de dicts: job_deps[j] = {maquina_u: maquina_v, ...}
+        
+        i = 0
+        while i < len(linhas):
+            if linhas[i].strip().startswith("Job:"):
+                deps = {}
+                i += 1
+                while i < len(linhas) and not linhas[i].strip().startswith("Job:") and not linhas[i].strip().startswith("#"):
+                    match = re.match(r'\s*(\d+)\s*->\s*(\d+)', linhas[i].strip())
+                    if match:
+                        u = int(match.group(1))
+                        v = int(match.group(2))
+                        deps[u] = v
+                    i += 1
+                job_deps.append(deps)
+            else:
+                i += 1
+        
+        # Gera a sequência ordenada de máquinas para cada job
+        job_ordem = []
+        for j in range(num_jobs):
+            if j < len(job_deps):
+                deps = job_deps[j]
+                # Encontra a primeira máquina (a que não é destino de ninguém)
+                destinos = set(deps.values())
+                origens = set(deps.keys())
+                todas = origens | destinos
+                primeira = None
+                for m in todas:
+                    if m not in destinos:
+                        primeira = m
+                        break
+                
+                if primeira is None:
+                    # Fallback: usa ordem 0, 1, 2...
+                    job_ordem.append(list(range(num_maquinas)))
+                    continue
+                
+                # Percorre a cadeia de dependências
+                ordem = [primeira]
+                atual = primeira
+                while atual in deps:
+                    atual = deps[atual]
+                    ordem.append(atual)
+                
+                job_ordem.append(ordem)
+            else:
+                job_ordem.append(list(range(num_maquinas)))
+        
+        return num_jobs, num_maquinas, tempos, job_ordem
     except Exception as e:
         print(f"Erro ao ler .psi: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def extrair_dados_resultado(caminho_res):
@@ -53,7 +109,7 @@ def extrair_dados_resultado(caminho_res):
                 if len(coord) >= 2:
                     caminho_critico.append({'job': int(coord[0]), 'machine': int(coord[1])})
         
-        t_match = re.search(r"Tempo de Execucao: ([\d\.]+)", conteudo)
+        t_match = re.search(r"Tempo de Execucao: ([\d\.eE\-\+]+)", conteudo)
         if t_match: tempo_exec = f"{t_match.group(1)}s"
                     
         return makespan, caminho_critico, tempo_exec
@@ -61,26 +117,63 @@ def extrair_dados_resultado(caminho_res):
         print(f"Erro ao ler resultado: {e}")
         return None, [], "N/A"
 
-def gerar_visualizacao(num_jobs, num_maquinas, tempos, makespan_real, caminho_real, tempo_exec, filename):
-    # Lógica de Escalonamento (Heurística básica para preencher o que o C++ não enviou)
-    tempo_maquina = [0] * num_maquinas
-    tempo_job = [0] * num_jobs
-    operacoes = []
-
+def gerar_visualizacao(num_jobs, num_maquinas, tempos, job_ordem, makespan_real, caminho_real, tempo_exec, filename):
+    """
+    Escalonamento Guloso (FIFO) respeitando a ordem de precedência de cada Job.
+    Replica a heurística do C++ (resolveHeuristica).
+    """
+    
+    # Cria as operações com a ordem de precedência correta
+    # ops_info[j][posição] = (maquina, duracao)
+    operacoes_por_job = []
     for j in range(num_jobs):
-        for m in range(num_maquinas):
-            duracao = tempos[j][m]
-            inicio = max(tempo_job[j], tempo_maquina[m])
-            fim = inicio + duracao
-            is_critico = any(c['job'] == j and c['machine'] == m for c in caminho_real)
-            operacoes.append({
-                'job': j, 'machine': m, 'inicio': inicio, 
-                'duracao': duracao, 'fim': fim, 'critico': is_critico
-            })
-            tempo_maquina[m] = fim
-            tempo_job[j] = fim
-
-    makespan_final = makespan_real if makespan_real else max(tempo_job)
+        ops = []
+        for m in job_ordem[j]:
+            ops.append({'machine': m, 'duracao': tempos[j][m]})
+        operacoes_por_job.append(ops)
+    
+    # Escalonamento Guloso (FIFO) - replica resolveHeuristica do C++
+    # Cada job tem um ponteiro para a próxima operação a executar
+    prox_op = [0] * num_jobs  # índice da próxima operação de cada job
+    tempo_fim_job = [0] * num_jobs  # quando o job fica livre
+    tempo_fim_maquina = [0] * num_maquinas  # quando cada máquina fica livre
+    
+    # Fila de prontos: jobs cuja próxima operação pode ser agendada
+    prontos = list(range(num_jobs))
+    
+    resultado = []
+    
+    while prontos:
+        j = prontos.pop(0)  # FIFO
+        idx = prox_op[j]
+        
+        if idx >= len(operacoes_por_job[j]):
+            continue
+        
+        op = operacoes_por_job[j][idx]
+        m = op['machine']
+        duracao = op['duracao']
+        
+        inicio = max(tempo_fim_job[j], tempo_fim_maquina[m])
+        fim = inicio + duracao
+        
+        is_critico = any(c['job'] == j and c['machine'] == m for c in caminho_real)
+        
+        resultado.append({
+            'job': j, 'machine': m, 'inicio': inicio,
+            'duracao': duracao, 'fim': fim, 'critico': is_critico
+        })
+        
+        tempo_fim_job[j] = fim
+        tempo_fim_maquina[m] = fim
+        
+        prox_op[j] = idx + 1
+        
+        # Se o job ainda tem operações, coloca de volta na fila
+        if prox_op[j] < len(operacoes_por_job[j]):
+            prontos.append(j)
+    
+    makespan_final = makespan_real if makespan_real else max(tempo_fim_job)
     
     html_template = f"""
     <!DOCTYPE html>
@@ -101,8 +194,8 @@ def gerar_visualizacao(num_jobs, num_maquinas, tempos, makespan_real, caminho_re
             .chip-time {{ background: #fffbeb; color: #b45309; border-color: #fde68a; }}
             .chip-makespan {{ background: #ecfdf5; color: #047857; border-color: #a7f3d0; }}
             .path-box {{ background: #fff5f5; border: 1px solid #fee2e2; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
-            .chart-container {{ width: 100%; overflow-x: auto; background: white; padding: 10px 0; display: inline-block; min-width: 100%; }}
-            .gantt-chart {{ position: relative; border-left: 2px solid #cfd8dc; border-bottom: 2px solid #cfd8dc; padding: 5px 0; display: inline-block; }}
+            .chart-container {{ width: 100%; overflow-x: auto; background: white; padding: 10px 0; }}
+            .gantt-chart {{ position: relative; border-left: 2px solid #cfd8dc; border-bottom: 2px solid #cfd8dc; padding: 5px 0; }}
             
             .legend {{ display: flex; flex-wrap: wrap; gap: 15px; margin-top: 25px; justify-content: center; font-size: 0.8em; border-top: 1px solid #eee; padding-top: 15px; }}
             .legend-item {{ display: flex; align-items: center; gap: 6px; font-weight: 600; color: #64748b; }}
@@ -110,15 +203,7 @@ def gerar_visualizacao(num_jobs, num_maquinas, tempos, makespan_real, caminho_re
 
             .job-row {{ height: 48px; display: flex; align-items: center; border-bottom: 1px solid #f1f5f9; position: relative; }}
             .job-label {{ width: 80px; min-width: 80px; font-weight: 700; position: sticky; left: 0; background: white; z-index: 20; color: #94a3b8; font-size: 0.8em; text-align: center; }}
-            @keyframes fadeIn {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-            .op-bar {{ 
-                position: absolute; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; 
-                color: white; font-size: 0.75em; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-                transition: all 0.2s; cursor: pointer; animation: fadeIn 0.4s ease-out forwards;
-                background-image: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(0,0,0,0.05));
-            }}
-            .op-bar:hover {{ transform: scale(1.05); z-index: 100 !important; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }}
-            
+
             /* Eixo do Tempo */
             .time-axis {{ height: 30px; position: relative; border-top: 2px solid #cfd8dc; margin-top: 10px; margin-left: 80px; }}
             .time-mark {{ position: absolute; top: 0; transform: translateX(-50%); font-size: 0.7em; color: #64748b; padding-top: 8px; font-weight: 600; }}
@@ -151,14 +236,14 @@ def gerar_visualizacao(num_jobs, num_maquinas, tempos, makespan_real, caminho_re
                 <div class="chip chip-makespan">🏆 Makespan: {makespan_final}</div>
             </div>
             <div class="path-box">
-                <div style="font-weight: bold; color: var(--critical); font-size: 0.8em; text-transform: uppercase; margin-bottom: 5px;">Caminho Crítico:</div>
-                <div style="font-family: monospace; font-size: 0.9em; color: #b91c1c;">{" → ".join([f"[{c['job']},{c['machine']}]" for c in caminho_real])}</div>
+                <div style="font-weight: bold; color: var(--critical); font-size: 0.8em; text-transform: uppercase; margin-bottom: 5px;">Caminho Crítico [m, j]:</div>
+                <div style="font-family: monospace; font-size: 0.9em; color: #b91c1c;">{" → ".join([f"[{c['machine']},{c['job']}]" for c in caminho_real])}</div>
             </div>
             <div class="chart-container" id="chartScroll">
                 <div class="gantt-chart" id="ganttChart" style="width: {makespan_final * 15 + 100}px;">
                     <div id="timeCursor"></div>
                     <div id="timeLabel">0</div>
-                    {gerar_rows_html(operacoes, num_jobs)}
+                    {gerar_rows_html(resultado, num_jobs)}
                 </div>
                 <div class="time-axis" id="timeAxis" style="width: {makespan_final * 15 + 100}px;">
                     {gerar_axis_html(makespan_final)}
@@ -212,7 +297,7 @@ def gerar_rows_html(ops, num_jobs):
         job_ops = [o for o in ops if o['job'] == j]
         for op in job_ops:
             crit_class = " critical" if op['critico'] else ""
-            cor = ["#3498db", "#9b59b6", "#f1c40f", "#2ecc71", "#e67e22", "#e74c3c", "#1abc9c", "#34495e", "#d35400", "#c0392b"][op['machine'] % 10]
+            cor = ["#3498db", "#9b59b6", "#f1c40f", "#2ecc71", "#e67e22", "#e74c3c", "#1abc9c", "#34495e", "#d35400", "#c0392b", "#27ae60", "#2980b9", "#8e44ad", "#f39c12", "#7f8c8d"][op['machine'] % 15]
             title = f"M{op['machine']} | Duração: {op['duracao']} | Início: {op['inicio']} | Fim: {op['fim']}"
             rows += f'<div class="op-bar{crit_class}" style="left: {op["inicio"] * 15 + 85}px; width: {op["duracao"] * 15}px; background-color: {cor};" title="{title}">'
             rows += f'M{op["machine"]}({op["duracao"]})</div>'
@@ -221,18 +306,21 @@ def gerar_rows_html(ops, num_jobs):
 
 def gerar_axis_html(makespan):
     marks = ""
-    step = 50 if makespan > 200 else 10
-    if makespan > 1000: step = 100
+    if makespan <= 100: step = 5
+    elif makespan <= 200: step = 10
+    elif makespan <= 500: step = 50
+    elif makespan <= 2000: step = 100
+    else: step = 200
     for t in range(0, makespan + 1, step):
         marks += f'<div class="time-mark" style="left: {t * 15 + 5}px;">{t}</div>'
     return marks
 
 def gerar_legend_html(num_maquinas):
     items = ""
-    cores = ["#3498db", "#9b59b6", "#f1c40f", "#2ecc71", "#e67e22", "#e74c3c", "#1abc9c", "#34495e", "#d35400", "#c0392b"]
+    cores = ["#3498db", "#9b59b6", "#f1c40f", "#2ecc71", "#e67e22", "#e74c3c", "#1abc9c", "#34495e", "#d35400", "#c0392b", "#27ae60", "#2980b9", "#8e44ad", "#f39c12", "#7f8c8d"]
     for m in range(num_maquinas):
-        cor = cores[m % 10]
-        items += f'<div class="legend-item"><div class="color-box" style="background-color: {cor}"></div> Máquina {m}</div>'
+        cor = cores[m % 15]
+        items += f'<div class="legend-item"><div class="color-box" style="background-color: {cor}"></div> M{m}</div>'
     return items
 
 if __name__ == "__main__":
@@ -241,9 +329,9 @@ if __name__ == "__main__":
     else:
         dados_psi = extrair_dados_psi(sys.argv[1])
         if dados_psi:
-            nj, nm, t = dados_psi
+            nj, nm, t, jo = dados_psi
             mk, cp, tx = extrair_dados_resultado(sys.argv[2])
-            gerar_visualizacao(nj, nm, t, mk, cp, tx, os.path.basename(sys.argv[1]))
+            gerar_visualizacao(nj, nm, t, jo, mk, cp, tx, os.path.basename(sys.argv[1]))
             print("Visualização gerada com sucesso!")
         else:
             print("Não foi possível carregar a instância.")
