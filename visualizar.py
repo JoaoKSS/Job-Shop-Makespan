@@ -117,64 +117,44 @@ def extrair_dados_resultado(caminho_res):
         print(f"Erro ao ler resultado: {e}")
         return None, [], "N/A"
 
-def gerar_visualizacao(num_jobs, num_maquinas, tempos, job_ordem, makespan_real, caminho_real, tempo_exec, filename):
-    """
-    Escalonamento Guloso (FIFO) respeitando a ordem de precedência de cada Job.
-    Replica a heurística do C++ (resolveHeuristica).
-    """
-    
-    # Cria as operações com a ordem de precedência correta
-    # ops_info[j][posição] = (maquina, duracao)
-    operacoes_por_job = []
-    for j in range(num_jobs):
-        ops = []
-        for m in job_ordem[j]:
-            ops.append({'machine': m, 'duracao': tempos[j][m]})
-        operacoes_por_job.append(ops)
-    
-    # Escalonamento Guloso (FIFO) - replica resolveHeuristica do C++
-    # Cada job tem um ponteiro para a próxima operação a executar
-    prox_op = [0] * num_jobs  # índice da próxima operação de cada job
-    tempo_fim_job = [0] * num_jobs  # quando o job fica livre
-    tempo_fim_maquina = [0] * num_maquinas  # quando cada máquina fica livre
-    
-    # Fila de prontos: jobs cuja próxima operação pode ser agendada
-    prontos = list(range(num_jobs))
-    
-    resultado = []
-    
-    while prontos:
-        j = prontos.pop(0)  # FIFO
-        idx = prox_op[j]
-        
-        if idx >= len(operacoes_por_job[j]):
-            continue
-        
-        op = operacoes_por_job[j][idx]
-        m = op['machine']
-        duracao = op['duracao']
-        
-        inicio = max(tempo_fim_job[j], tempo_fim_maquina[m])
-        fim = inicio + duracao
-        
-        is_critico = any(c['job'] == j and c['machine'] == m for c in caminho_real)
-        
-        resultado.append({
-            'job': j, 'machine': m, 'inicio': inicio,
-            'duracao': duracao, 'fim': fim, 'critico': is_critico
-        })
-        
-        tempo_fim_job[j] = fim
-        tempo_fim_maquina[m] = fim
-        
-        prox_op[j] = idx + 1
-        
-        # Se o job ainda tem operações, coloca de volta na fila
-        if prox_op[j] < len(operacoes_por_job[j]):
-            prontos.append(j)
-    
-    makespan_final = makespan_real if makespan_real else max(tempo_fim_job)
-    
+def extrair_escalonamento(caminho_res):
+    """Lê o bloco 'Escalonamento:' do resultado.txt com os tempos reais do C++."""
+    try:
+        with open(caminho_res, 'r') as f:
+            conteudo = f.read()
+
+        operacoes = []
+        em_bloco = False
+        for linha in conteudo.splitlines():
+            if linha.strip() == "Escalonamento:":
+                em_bloco = True
+                continue
+            if em_bloco:
+                # Formato: [job,maquina] inicio=X fim=Y
+                m = re.match(r'\[(\d+),(\d+)\]\s+inicio=(\d+)\s+fim=(\d+)', linha.strip())
+                if m:
+                    operacoes.append({
+                        'job': int(m.group(1)),
+                        'machine': int(m.group(2)),
+                        'inicio': int(m.group(3)),
+                        'fim': int(m.group(4)),
+                        'duracao': int(m.group(4)) - int(m.group(3)),
+                    })
+        return operacoes
+    except Exception as e:
+        print(f"Erro ao ler escalonamento: {e}")
+        return []
+
+def gerar_visualizacao(num_jobs, num_maquinas, makespan_real, caminho_real, escalonamento, tempo_exec, filename):
+    """Gera o HTML usando os tempos reais exportados pelo C++."""
+
+    # Marca quais operações estão no caminho crítico
+    criticos = {(c['job'], c['machine']) for c in caminho_real}
+    for op in escalonamento:
+        op['critico'] = (op['job'], op['machine']) in criticos
+
+    makespan_final = makespan_real if makespan_real else max((op['fim'] for op in escalonamento), default=0)
+
     html_template = f"""
     <!DOCTYPE html>
     <html lang="pt-br">
@@ -236,14 +216,14 @@ def gerar_visualizacao(num_jobs, num_maquinas, tempos, job_ordem, makespan_real,
                 <div class="chip chip-makespan">🏆 Makespan: {makespan_final}</div>
             </div>
             <div class="path-box">
-                <div style="font-weight: bold; color: var(--critical); font-size: 0.8em; text-transform: uppercase; margin-bottom: 5px;">Caminho Crítico [m, j]:</div>
+                <div style="font-weight: bold; color: var(--critical); font-size: 0.8em; text-transform: uppercase; margin-bottom: 5px;">Caminho Crítico [maquina, Trabalho]:</div>
                 <div style="font-family: monospace; font-size: 0.9em; color: #b91c1c;">{" → ".join([f"[{c['machine']},{c['job']}]" for c in caminho_real])}</div>
             </div>
             <div class="chart-container" id="chartScroll">
                 <div class="gantt-chart" id="ganttChart" style="width: {makespan_final * 15 + 100}px;">
                     <div id="timeCursor"></div>
                     <div id="timeLabel">0</div>
-                    {gerar_rows_html(resultado, num_jobs)}
+                    {gerar_rows_html(escalonamento, num_jobs)}
                 </div>
                 <div class="time-axis" id="timeAxis" style="width: {makespan_final * 15 + 100}px;">
                     {gerar_axis_html(makespan_final)}
@@ -329,9 +309,13 @@ if __name__ == "__main__":
     else:
         dados_psi = extrair_dados_psi(sys.argv[1])
         if dados_psi:
-            nj, nm, t, jo = dados_psi
+            nj, nm, _t, _jo = dados_psi
             mk, cp, tx = extrair_dados_resultado(sys.argv[2])
-            gerar_visualizacao(nj, nm, t, jo, mk, cp, tx, os.path.basename(sys.argv[1]))
-            print("Visualização gerada com sucesso!")
+            esc = extrair_escalonamento(sys.argv[2])
+            if not esc:
+                print("Aviso: bloco 'Escalonamento:' nao encontrado no resultado.txt. Recompile e rode o C++ novamente.")
+            else:
+                gerar_visualizacao(nj, nm, mk, cp, esc, tx, os.path.basename(sys.argv[1]))
+                print("Visualizacao gerada com sucesso!")
         else:
-            print("Não foi possível carregar a instância.")
+            print("Nao foi possivel carregar a instancia.")
