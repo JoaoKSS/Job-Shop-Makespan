@@ -15,6 +15,7 @@ void GrafoDisjuntivo::init(int n) {
   AntJ.assign(n, -1);
   SucM.assign(n, -1);
   AntM.assign(n, -1);
+  grau_entrada.assign(n, 0);
   for (int i = 0; i < MAX_NODES; ++i)
     adj[i].clear();
 }
@@ -96,19 +97,21 @@ void lerInstancia(string filepath, GrafoDisjuntivo &g) {
   fin.close();
 }
 
-bool caminhadaTopologica(const GrafoDisjuntivo &g, vector<int> &ordem) {
+bool caminhadaTopologica(GrafoDisjuntivo &g, vector<int> &ordem) {
   ordem.clear();
-  vector<int> grau_entrada(g.num_operacoes, 0);
+  
+  // Reinicializa grau_entrada
+  fill(g.grau_entrada.begin(), g.grau_entrada.end(), 0);
 
   for (int i = 0; i < g.num_operacoes; ++i) {
     for (int v : g.adj[i]) {
-      grau_entrada[v]++;
+      g.grau_entrada[v]++;
     }
   }
 
   queue<int> fila;
   for (int i = 0; i < g.num_operacoes; ++i) {
-    if (grau_entrada[i] == 0) {
+    if (g.grau_entrada[i] == 0) {
       fila.push(i);
     }
   }
@@ -119,8 +122,8 @@ bool caminhadaTopologica(const GrafoDisjuntivo &g, vector<int> &ordem) {
     ordem.push_back(u);
 
     for (int v : g.adj[u]) {
-      grau_entrada[v]--;
-      if (grau_entrada[v] == 0) {
+      g.grau_entrada[v]--;
+      if (g.grau_entrada[v] == 0) {
         fila.push(v);
       }
     }
@@ -166,49 +169,52 @@ int caminhoMaximo(const GrafoDisjuntivo &g, const vector<int> &ordem_topologica,
   return makespan;
 }
 
-// heuristica gulosa para definir uma solucao viavel
+/**
+ * @brief Gera uma solução inicial factível para o problema de Job Shop.
+ * * Utiliza uma heurística construtiva gulosa baseada em uma fila de prioridade 
+ * simples (FIFO) para orientar as arestas disjuntivas das máquinas.
+ * * @details
+ * A fila começa com a 1ª etapa de cada Job. Empates são 
+ * desempatados estritamente pela ordem de leitura do arquivo (Job 0, Job 1...).
+ * A primeira operação da fila ganha a máquina que exige. 
+ * Se a máquina estiver ocupada, ela entra na fila daquela máquina, gerando 
+ * as restrições (SucM e AntM).
+ * Assim que uma operação é agendada, a próxima etapa daquele 
+ * mesmo Job é destrancada e enviada para o final da fila geral.
+ */
 void resolveHeuristica(GrafoDisjuntivo &g) {
-  // Monta listas de operacoes por maquina
-  vector<vector<int>> ops_maquina(g.num_maquinas);
-  for (int i = 0; i < g.num_operacoes; ++i) {
-    ops_maquina[g.M[i]].push_back(i);
-  }
 
-  vector<int> prontos;
-  vector<int> ops_restantes_job(
-      g.num_jobs, 0); // indice da proxima operacao a rodar de cada job
-  vector<int> primeira_op_job(g.num_jobs, -1);
+queue<int> operacoes_disponiveis;
 
-  // encontra a primeira operacao de cada job
+// Encontra a primeira operacao de cada job e coloca na fila de disponíveis
   for (int i = 0; i < g.num_operacoes; ++i) {
     if (g.AntJ[i] == -1) {
-      primeira_op_job[g.J[i]] = i;
+      operacoes_disponiveis.push(i);
     }
   }
 
-  for (int j = 0; j < g.num_jobs; ++j) {
-    if (primeira_op_job[j] != -1)
-      prontos.push_back(primeira_op_job[j]);
-  }
-
+  // guarda quem é o último da fila de espera em cada máquina
   vector<int> ultima_na_maquina(g.num_maquinas, -1);
 
-  while (!prontos.empty()) {
+  while (!operacoes_disponiveis.empty()) {
     // Pega a primeira disponivel e agenda na maquina dela
-    int u = prontos.front();
-    prontos.erase(prontos.begin());
+    int op_atual = operacoes_disponiveis.front();
+    operacoes_disponiveis.pop();
 
-    int m = g.M[u];
-    if (ultima_na_maquina[m] != -1) {
-      int ant = ultima_na_maquina[m];
-      g.SucM[ant] = u;
-      g.AntM[u] = ant;
+    int maquina_necessaria = g.M[op_atual];
+    if (ultima_na_maquina[maquina_necessaria] != -1) { // se já tem uma operação agendada pra essa máquina
+      // a operação atual entra atrás dela
+      int ant = ultima_na_maquina[maquina_necessaria];
+      g.SucM[ant] = op_atual;
+      g.AntM[op_atual] = ant;
     }
-    ultima_na_maquina[m] = u;
 
-    // Coloca o sucessor do job como pronto
-    if (g.SucJ[u] != -1) {
-      prontos.push_back(g.SucJ[u]);
+    // a atual agora é a última operação agendada para essa máquina
+    ultima_na_maquina[maquina_necessaria] = op_atual;
+    // libera o próximo da linha do job, se existir
+    int proxima_op_job = g.SucJ[op_atual];
+    if (proxima_op_job != -1) {
+      operacoes_disponiveis.push(proxima_op_job);
     }
   }
 
