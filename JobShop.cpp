@@ -31,6 +31,33 @@ void GrafoDisjuntivo::constroiAdjacencia() {
   }
 }
 
+void GrafoDisjuntivo::aplicaSwap(int u, int v, int &ant_u, int &suc_v) {
+  ant_u = AntM[u];
+  suc_v = SucM[v];
+
+  SucM[u] = suc_v;
+  AntM[u] = v;
+  SucM[v] = u;
+  AntM[v] = ant_u;
+
+  if (ant_u != -1) SucM[ant_u] = v;
+  if (suc_v != -1) AntM[suc_v] = u;
+
+  constroiAdjacencia();
+}
+
+void GrafoDisjuntivo::reverteSwap(int u, int v, int ant_u, int suc_v) {
+  SucM[u] = v;
+  AntM[u] = ant_u;
+  SucM[v] = suc_v;
+  AntM[v] = u;
+
+  if (ant_u != -1) SucM[ant_u] = u;
+  if (suc_v != -1) AntM[suc_v] = v;
+
+  constroiAdjacencia();
+}
+
 void lerInstancia(string filepath, GrafoDisjuntivo &g) {
   ifstream fin(filepath);
   if (!fin.is_open()) {
@@ -222,16 +249,16 @@ queue<int> operacoes_disponiveis;
 
 // Busca Local baseada em Hill Climbing
 void buscaLocal(GrafoDisjuntivo &g) {
+  vector<int> ordem;
+  if (!caminhadaTopologica(g, ordem))
+    return;
+
+  vector<int> caminho_critico;
+  int melhor_makespan = caminhoMaximo(g, ordem, caminho_critico);
+
   bool melhorou = true;
   while (melhorou) {
     melhorou = false;
-
-    vector<int> ordem;
-    if (!caminhadaTopologica(g, ordem))
-      break;
-
-    vector<int> caminho_critico;
-    int melhor_makespan = caminhoMaximo(g, ordem, caminho_critico);
 
     // Vizinhança em Blocos
     vector<pair<int, int>> pares_validos;
@@ -269,20 +296,8 @@ void buscaLocal(GrafoDisjuntivo &g) {
       int u = par.first;
       int v = par.second;
 
-      // Salva estado antigo
-      int ant_u = g.AntM[u];
-      int suc_v = g.SucM[v];
-
-      // Swap
-      g.SucM[u] = suc_v;
-      g.AntM[u] = v;
-      g.SucM[v] = u;
-      g.AntM[v] = ant_u;
-
-      if (ant_u != -1) g.SucM[ant_u] = v;
-      if (suc_v != -1) g.AntM[suc_v] = u;
-
-      g.constroiAdjacencia();
+      int ant_u, suc_v;
+      g.aplicaSwap(u, v, ant_u, suc_v);
 
       vector<int> nova_ordem;
       if (caminhadaTopologica(g, nova_ordem)) {
@@ -291,21 +306,16 @@ void buscaLocal(GrafoDisjuntivo &g) {
 
         // Funcao objetivo de Minimizacao
         if (novo_makespan < melhor_makespan) {
+          melhor_makespan = novo_makespan;
+          ordem = nova_ordem;
+          caminho_critico = novo_caminho;
           melhorou = true;
           break; // Aceita a melhora e reinicia a busca
         }
       }
 
       // Reverte as mudancas se piorou ou se causou ciclo
-      g.SucM[u] = v;
-      g.AntM[u] = ant_u;
-      g.SucM[v] = suc_v;
-      g.AntM[v] = u;
-
-      if (ant_u != -1) g.SucM[ant_u] = u;
-      if (suc_v != -1) g.AntM[suc_v] = v;
-
-      g.constroiAdjacencia();
+      g.reverteSwap(u, v, ant_u, suc_v);
     }
   }
 }

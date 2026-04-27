@@ -30,6 +30,8 @@ struct GrafoDisjuntivo {
 
     void init(int n);
     void constroiAdjacencia();
+    void aplicaSwap(int u, int v, int &ant_u, int &suc_v);
+    void reverteSwap(int u, int v, int ant_u, int suc_v);
 };
 
 // Funções principais
