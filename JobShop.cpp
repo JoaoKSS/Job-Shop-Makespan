@@ -16,8 +16,7 @@ void GrafoDisjuntivo::init(int n) {
   SucM.assign(n, -1);
   AntM.assign(n, -1);
   grau_entrada.assign(n, 0);
-  for (int i = 0; i < MAX_NODES; ++i)
-    adj[i].clear();
+  adj.assign(n, vector<int>());
 }
 
 void GrafoDisjuntivo::constroiAdjacencia() {

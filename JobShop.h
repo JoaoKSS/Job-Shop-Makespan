@@ -6,8 +6,6 @@
 
 using namespace std;
 
-const int MAX_NODES = 2000; // Limite para instâncias (100 jobs x 20 máquinas)
-
 struct GrafoDisjuntivo {
     int num_operacoes;
     int num_jobs;
@@ -28,7 +26,7 @@ struct GrafoDisjuntivo {
     vector<int> grau_entrada;
 
     // Lista de Adjacência
-    vector<int> adj[MAX_NODES];
+    vector<vector<int>> adj;
 
     void init(int n);
     void constroiAdjacencia();
