@@ -64,7 +64,8 @@ def run_instance(executable, instance_path):
 def main():
     # Configurações
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    executable = os.path.join(base_dir, "jobshop.exe")
+    exe_name = "jobshop.exe" if os.name == "nt" else "jobshop"
+    executable = os.path.join(base_dir, exe_name)
     instances_dir = os.path.join(base_dir, "Instancias", "JSP")
     
     # Verifica se o executável existe
