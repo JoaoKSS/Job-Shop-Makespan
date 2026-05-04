@@ -17,6 +17,10 @@ make clean
 ./jobshop Instancias/JSP/nome_do_arquivo.psi > resultado.txt && python3 visualizar.py Instancias/JSP/nome_do_arquivo.psi resultado.txt
 ```
 
+```bash
+python3 generate_results.py
+```
+
 ## exemplo de saída
 
 Instancia carregada: 3 Jobs, 5 Maquinas.<br>
