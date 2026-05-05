@@ -13,7 +13,7 @@ Este projeto implementa um otimizador heurístico para o clássico **Job Shop Sc
 
 - **Resolução de Instâncias:** Lê arquivos padrão Taillard/OR-Library (`.psi`).
 - **Geração de Gráficos:** Cria gráficos de Gantt interativos utilizando Python (`visualizar.py`).
-- **Geração de Tabela:** Processa múltiplas instâncias em lote e exporta relatórios completos para Excel (`generate_results.py`).
+- **Geração de Relatórios em Lote:** Processa todas as instâncias de forma ultrarrápida nativamente em C++ (`generate_results.cpp`), exportando a tabela comparativa para `.csv`.
 
 ---
 
@@ -45,12 +45,14 @@ Para rodar a instância, salvar a saída e já abrir o gráfico de Gantt animado
 ./jobshop Instancias/JSP/nome_do_arquivo.psi > resultado.txt && python3 visualizar.py Instancias/JSP/nome_do_arquivo.psi resultado.txt
 ```
 
-### Gerar Relatório Completo (Excel)
-Para processar todas as instâncias da pasta e exportar a tabela comparativa (Makespan obtido vs Best Known Solution):
+### Gerar Relatório Completo em Lote (CSV)
+Para processar todas as 80 instâncias da pasta de forma ultrarrápida e exportar a tabela comparativa (Makespan obtido vs Best Known Solution) para o arquivo `resultados_ta01_ta80.csv`:
 ```bash
-python3 generate_results.py
+make
+./generate_results
 ```
-*(Nota: Certifique-se de ter a biblioteca `openpyxl` instalada: `python3 -m pip install openpyxl`)*
+
+*(Opcional: Se desejar utilizar o script em Python para gerar o `.xlsx` via openpyxl, use: `python3 generate_results.py`)*
 
 ---
 
