@@ -45,6 +45,10 @@ Para rodar a instância, salvar a saída e já abrir o gráfico de Gantt animado
 ./jobshop Instancias/JSP/nome_do_arquivo.psi > resultado.txt && python3 visualizar.py Instancias/JSP/nome_do_arquivo.psi resultado.txt
 ```
 
+<div align="center">
+  <img src="imagens/Job%20Shop%20Visualizer.png" alt="Exemplo do Job Shop Visualizer" width="800"/>
+</div>
+
 ### Gerar Relatório Completo em Lote (CSV)
 Para processar todas as 80 instâncias da pasta de forma ultrarrápida e exportar a tabela comparativa (Makespan obtido vs Best Known Solution) para o arquivo `resultados_ta01_ta80.csv`:
 ```bash
