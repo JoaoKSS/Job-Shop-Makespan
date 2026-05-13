@@ -2,10 +2,10 @@
 
 ![Badge](https://img.shields.io/badge/C%2B%2B-17-blue?style=flat&logo=c%2B%2B)
 ![Badge](https://img.shields.io/badge/Python-3.x-blue?style=flat&logo=python)
-![Badge](https://img.shields.io/badge/Otimiza%C3%A7%C3%A3o-Busca%20Local%20(N3)-orange?style=flat)
+![Badge](https://img.shields.io/badge/Otimiza%C3%A7%C3%A3o-Busca%20Local%20(N5)-orange?style=flat)
 ![Badge](https://img.shields.io/badge/Status-Conclu%C3%ADdo-success?style=flat)
 
-Este projeto implementa um otimizador heurístico para o clássico **Job Shop Scheduling Problem (JSP)**. O algoritmo utiliza **Caminhada Topológica (Algoritmo de Kahn)** para validação de grafos acíclicos, **Programação Dinâmica** para cálculo do Caminho Crítico e Makespan, e uma **Busca Local (Hill Climbing com Vizinhança N3)** para otimizar as soluções encontradas.
+Este projeto implementa um otimizador heurístico para o clássico **Job Shop Scheduling Problem (JSP)**. O algoritmo utiliza **Caminhada Topológica (Algoritmo de Kahn)** para validação de grafos acíclicos, **Programação Dinâmica** para cálculo do Caminho Crítico e Makespan, e uma **Busca Local (Hill Climbing com Vizinhança N5)** para otimizar as soluções encontradas.
 
 ---
 
